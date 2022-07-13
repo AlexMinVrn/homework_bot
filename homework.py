@@ -3,6 +3,7 @@ import time
 
 import os
 import logging
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -24,7 +25,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 30
+RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -40,11 +41,13 @@ last_message = ''
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     global last_message
-    print(last_message)
     if message != last_message:
-        bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.info(f'Сообщение <{message}> отправлено в телеграм')
-        last_message = message
+        try:
+            bot.send_message(TELEGRAM_CHAT_ID, message)
+            logger.info(f'Сообщение <{message}> отправлено в телеграм')
+            last_message = message
+        except Exception as error:
+            logger.error(f'Сбой при отправке сообщения в Telegram: {error}')
 
 
 def get_api_answer(current_timestamp):
@@ -55,17 +58,18 @@ def get_api_answer(current_timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except Exception as error:
         logger.error(f'Ошибка при запросе к основному API: {error}')
-
-    if response.status_code != 200:
-        logger.error(f'Error {response.status_code}')
-        raise Exception('API не ответил')
+    if response.status_code != HTTPStatus.OK:
+        message = f'Ошибка при запросе к API.' \
+                  f' Код ответа: {response.status_code}'
+        logger.error(message)
+        raise Exception(message)
     return response.json()
 
 
 def check_response(response):
     """Распаковывает словарь ответа API, получает первый экземпляр списка."""
     try:
-        homeworks = response.get('homeworks', [])
+        homeworks = response.get('homeworks')
     except IndexError as error:
         logger.error(
             f'Ошибка при получении списка с домашним заданием: {error}'
@@ -98,7 +102,7 @@ def parse_status(homework):
         f'Недокументированный статус домашней работы {homework_name}'
     )
     logger.error(message)
-    raise KeyError(message)
+    raise Exception(message)
 
 
 def check_tokens():
@@ -111,7 +115,7 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time() - 111111111)
+    current_timestamp = int(time.time())
     if check_tokens() is False:
         logger.critical(
             'Отсутствует обязательная переменная окружения,'
