@@ -1,13 +1,12 @@
+import json
+import logging
 import os
 import sys
-
 import time
-import logging
-import requests
-import json
-import telegram
-
 from http import HTTPStatus
+
+import requests
+import telegram
 from dotenv import load_dotenv
 from telegram import TelegramError
 
@@ -81,7 +80,11 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Распаковывает словарь ответа API."""
-    homeworks = response['homeworks']
+    try:
+        homeworks = response['homeworks']
+    except KeyError as error:
+        logger.error(f'Отсутствует ключ: {error}')
+        raise KeyError(f'Отсутствует ключ: {error}')
     if not response:
         logger.error('Ответ API пустой словарь')
         raise Exception('Ответ API пустой словарь')
